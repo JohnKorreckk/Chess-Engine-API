@@ -1,3 +1,8 @@
+/**
+ * @file DifficultMoveGenerationTest.cpp
+ * @author John Korreck
+ */
+
 #include "gtest/gtest.h"
 #include "Board.h"
 
@@ -15,39 +20,37 @@ static int countMoves(Board &board, int depth) {
     return count;
 }
 
-// Initial positions
-TEST(MoveGenerationTest, InitialPositionDepth1) {
+
+// Difficult positions
+TEST(MoveGenerationTest, DifficultPositionDepth1) {
     std::string name = "Board";
-    std::string position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    std::string position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
     Board board(name, position);
 
     int count = countMoves(board, 1);
     std::cout << "Count " << count << std::endl;
 
-    // Test depth 1 (should be 20 moves for initial position)
-    EXPECT_EQ(count, 20);
+    EXPECT_EQ(count, 48);
 }
 
-TEST(MoveGenerationTest, InitialPositionDepth2) {
+TEST(MoveGenerationTest, DifficultPositionDepth2) {
     std::string name = "Board";
-    std::string position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    std::string position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
     Board board(name, position);
 
     int count = countMoves(board, 2);
     std::cout << "Count " << count << std::endl;
 
-    // Test depth 2 (should be 400 moves for initial position)
-    EXPECT_EQ(count, 400);
+    EXPECT_EQ(count, 2039);
 }
 
-TEST(MoveGenerationTest, InitialPositionDepth3) {
+TEST(MoveGenerationTest, DifficultPositionDepth3) {
     std::string name = "Board";
-    std::string position = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    std::string position = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -";
     Board board(name, position);
 
     int count = countMoves(board, 3);
     std::cout << "Count " << count << std::endl;
 
-    // Test depth 4 (should be 400 moves for initial position)
-    EXPECT_EQ(count, 8902);
+    EXPECT_EQ(count, 97862);
 }

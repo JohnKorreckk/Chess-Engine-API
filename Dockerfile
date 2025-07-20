@@ -32,7 +32,8 @@ RUN cp build/chessengine*.so .
 FROM python:3.12-slim
 
 # Install FastAPI and Uvicorn
-RUN pip install fastapi uvicorn
+RUN pip install fastapi uvicorn slowapi
+
 
 # Copy built files from builder stage
 WORKDIR /app

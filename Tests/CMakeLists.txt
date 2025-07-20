@@ -15,6 +15,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(Tests_run
         gtest_main.cpp
         MoveGenerationTest.cpp
+        DifficultMoveGenerationTest.cpp
 )
 
 target_link_libraries(Tests_run

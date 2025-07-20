@@ -36,7 +36,7 @@ set(number_of_tries 0)
 while(error_code AND number_of_tries LESS 3)
   execute_process(
     COMMAND "/opt/homebrew/bin/git"
-            clone --no-checkout --config "advice.detachedHead=false" "https://github.com/google/googletest.git" "googletest-src"
+            clone --no-checkout --depth 1 --no-single-branch --config "advice.detachedHead=false" "https://github.com/google/googletest.git" "googletest-src"
     WORKING_DIRECTORY "/Users/johnkorreck/Desktop/New-Chess-Engine/build/_deps"
     RESULT_VARIABLE error_code
     ${maybe_show_command}
@@ -52,13 +52,13 @@ endif()
 
 execute_process(
   COMMAND "/opt/homebrew/bin/git"
-          checkout "release-1.14.0" --
+          checkout "v1.14.0" --
   WORKING_DIRECTORY "/Users/johnkorreck/Desktop/New-Chess-Engine/build/_deps/googletest-src"
   RESULT_VARIABLE error_code
   ${maybe_show_command}
 )
 if(error_code)
-  message(FATAL_ERROR "Failed to checkout tag: 'release-1.14.0'")
+  message(FATAL_ERROR "Failed to checkout tag: 'v1.14.0'")
 endif()
 
 set(init_submodules TRUE)

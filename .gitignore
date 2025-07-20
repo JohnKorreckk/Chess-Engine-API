@@ -1,0 +1,10 @@
+# Python
+__pycache__/
+venv/
+
+# CMake build artifacts
+build/
+cmake-build-debug/
+
+# IDE configs
+.idea/

@@ -5,8 +5,6 @@
 
 #include "pch.h"
 #include <algorithm>
-#include <wx/xrc/xmlres.h>
-#include <wx/stdpaths.h>
 
 #include "ChessEngineApp.h"
 #include "Board.h"
@@ -28,13 +26,3 @@ bool ChessEngineApp::OnInit()
 
  return true;
 }
-
-/**
- * Exit the application. Time to shut down services such as miniaudio
- * @return
- */
-int ChessEngineApp::OnExit()
-{
- return wxAppBase::OnExit();
-}
-

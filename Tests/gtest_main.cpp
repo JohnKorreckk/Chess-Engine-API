@@ -1,5 +1,4 @@
 #include "gtest/gtest.h"
-#include <wx/filefn.h>
 
 
 int main(int argc, char** argv) {

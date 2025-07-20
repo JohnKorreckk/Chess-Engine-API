@@ -1,4 +1,8 @@
 #include "pch.h"
 #include "ChessEngineApp.h"
 
-wxIMPLEMENT_APP(ChessEngineApp);
+int main() {
+    ChessEngineApp app = ChessEngineApp();
+
+    app.OnInit();
+}

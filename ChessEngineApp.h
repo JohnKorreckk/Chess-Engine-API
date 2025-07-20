@@ -11,12 +11,11 @@
 class Board;
 class Engine;
 
-class ChessEngineApp : public wxApp {
+class ChessEngineApp {
 private:
  bool mIsGameOver = false;
 public:
- bool OnInit() override;
- int OnExit() override;
+ bool OnInit();
 };
 
 

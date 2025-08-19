@@ -64,7 +64,7 @@ On success (`200 OK`), returns:
 
 The API enforces rate limits for cost control:
 
-- Maximum: **10 requests per hour (global)**
+- Maximum: **10 requests per second (global)**
 
 Exceeding this limit will return **HTTP 429 Too Many Requests**.
 

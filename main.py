@@ -34,5 +34,5 @@ engine = chessengine.Engine()
 @limiter.limit("10/minute")
 async def best_move(request: Request, move_request: MoveRequest):
     board = chessengine.Board("Board", move_request.fen)
-    move = engine.find_best_move(board, 5)
+    move = engine.find_best_move(board, 3)
     return {"best_move": move}

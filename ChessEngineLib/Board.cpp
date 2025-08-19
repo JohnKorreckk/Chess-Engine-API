@@ -146,81 +146,70 @@ bool Board::IsSquareAttacked(const std::string& square, bool byWhite) {
     int targetFile = square[0] - 'a';
     int targetRank = 8 - (square[1] - '0');
 
-    // 1. Check pawn attacks
-    int pawnDir = byWhite ? -1 : 1;
+    // Pawns
+    int pawnDir = byWhite ? 1 : -1; // white pawns attack upwards (rank -1), so they come from below
+    int pawnPiece = byWhite ? 1 : -1;
     for (int i = 0; i < 2; i++) {
-        int fileOffset = (i == 0) ? -1 : 1;
-        int file = targetFile + fileOffset;
+        int file = targetFile + (i == 0 ? -1 : 1);
         int rank = targetRank + pawnDir;
         if (CheckBounds(file, rank)) {
             int piece = mBoard[rank][file];
-            if (piece == (byWhite ? 1 : -1)) return true;
+            if (piece == pawnPiece)
+                return true;
         }
     }
 
-    // 2. Check knight attacks
-    const int knightMoves[8][2] = {
-        {-2,-1}, {-2,1}, {-1,-2}, {-1,2},
-        {1,-2}, {1,2}, {2,-1}, {2,1}
-    };
-    for (int i = 0; i < 8; i++) {
-        int file = targetFile + knightMoves[i][0];
-        int rank = targetRank + knightMoves[i][1];
-        if (CheckBounds(file, rank)) {
-            int piece = mBoard[rank][file];
-            if (piece == (byWhite ? 2 : -2)) return true;
-        }
+    // Knights
+    static const int knightMoves[8][2] = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
+    for (const auto& move : knightMoves) {
+        int file = targetFile + move[0];
+        int rank = targetRank + move[1];
+        if (CheckBounds(file, rank) && mBoard[rank][file] == (byWhite ? 2 : -2))
+            return true;
     }
 
-    // 3. Check king attacks
-    const int kingMoves[8][2] = {
-        {-1,-1}, {-1,0}, {-1,1}, {0,-1},
-        {0,1}, {1,-1}, {1,0}, {1,1}
-    };
-    for (int i = 0; i < 8; i++) {
-        int file = targetFile + kingMoves[i][0];
-        int rank = targetRank + kingMoves[i][1];
-        if (CheckBounds(file, rank)) {
-            int piece = mBoard[rank][file];
-            if (piece == (byWhite ? 6 : -6)) return true;
-        }
+    // King (only need to check adjacent squares)
+    static const int kingMoves[8][2] = {{-1,-1},{-1,0},{-1,1},{0,-1},{0,1},{1,-1},{1,0},{1,1}};
+    for (const auto& move : kingMoves) {
+        int file = targetFile + move[0];
+        int rank = targetRank + move[1];
+        if (CheckBounds(file, rank) && mBoard[rank][file] == (byWhite ? 6 : -6))
+            return true;
     }
 
-    // 4. Check sliding pieces (bishops, rooks, queens)
-    const int bishopDirs[4][2] = {{1,1}, {1,-1}, {-1,1}, {-1,-1}};
-    const int rookDirs[4][2] = {{1,0}, {-1,0}, {0,1}, {0,-1}};
+    // Sliding pieces
+    static const int bishopDirs[4][2] = {{1,1},{1,-1},{-1,1},{-1,-1}};
+    static const int rookDirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
 
     // Check bishops/queens
-    for (int i = 0; i < 4; i++) {
+    for (const auto& dir : bishopDirs) {
         for (int dist = 1; dist < 8; dist++) {
-            int file = targetFile + bishopDirs[i][0] * dist;
-            int rank = targetRank + bishopDirs[i][1] * dist;
+            int file = targetFile + dir[0] * dist;
+            int rank = targetRank + dir[1] * dist;
             if (!CheckBounds(file, rank)) break;
 
             int piece = mBoard[rank][file];
             if (piece != 0) {
                 if ((byWhite && (piece == 3 || piece == 5)) ||
-                    (!byWhite && (piece == -3 || piece == -5))) {
+                    (!byWhite && (piece == -3 || piece == -5)))
                     return true;
-                }
                 break;
             }
         }
     }
 
     // Check rooks/queens
-    for (int i = 0; i < 4; i++) {
+    for (const auto& dir : rookDirs) {
         for (int dist = 1; dist < 8; dist++) {
-            int file = targetFile + rookDirs[i][0] * dist;
-            int rank = targetRank + rookDirs[i][1] * dist;
+            int file = targetFile + dir[0] * dist;
+            int rank = targetRank + dir[1] * dist;
             if (!CheckBounds(file, rank)) break;
 
             int piece = mBoard[rank][file];
             if (piece != 0) {
                 if ((byWhite && (piece == 4 || piece == 5)) ||
-                    (!byWhite && (piece == -4 || piece == -5))) {
+                    (!byWhite && (piece == -4 || piece == -5)))
                     return true;
-                }
                 break;
             }
         }
@@ -308,23 +297,45 @@ void Board::RestoreState(const BoardState& state) {
 bool Board::IsLegalMove(const std::string& move) {
     if (move.length() < 4) return false;
 
-    MakeMove(move);
-    bool illegal = false;
-    GeneratePossibleMoves(true);
-    for (std::string response: mResponses)
-    {
-        std::string responseSquare = "";
-        responseSquare += response[2];
-        responseSquare += response[3];
-        if ((!mWhiteTurn && responseSquare == mWhiteKingSquare) || (mWhiteTurn && responseSquare == mBlackKingSquare))
-        {
-            illegal = true;
-            break;
-        }
-    }
-    UndoMove();
+    // Save state
+    BoardState savedState = SaveState();
 
-    return !illegal;
+    // Make the move temporarily
+    int fromFile = move[0] - 'a';
+    int fromRank = 8 - (move[1] - '0');
+    int toFile = move[2] - 'a';
+    int toRank = 8 - (move[3] - '0');
+    int piece = mBoard[fromRank][fromFile];
+    int captured = mBoard[toRank][toFile];
+
+    // Special case: en passant
+    if (abs(piece) == 1 && !mEnPassantSquare.empty() &&
+        toFile == (mEnPassantSquare[0] - 'a') &&
+        toRank == (8 - (mEnPassantSquare[1] - '0'))) {
+        captured = mBoard[fromRank][toFile]; // Captured pawn is on same file
+        }
+
+    // Make the move on board
+    mBoard[fromRank][fromFile] = 0;
+    mBoard[toRank][toFile] = piece;
+
+    // Update king position if moving king
+    std::string kingSquare;
+    if (abs(piece) == 6) {
+        kingSquare = move.substr(2, 2);
+        if (piece > 0) mWhiteKingSquare = kingSquare;
+        else mBlackKingSquare = kingSquare;
+    } else {
+        kingSquare = (piece > 0) ? mWhiteKingSquare : mBlackKingSquare;
+    }
+
+    // Check if king is in check
+    bool inCheck = IsSquareAttacked(kingSquare, piece < 0);
+
+    // Restore state
+    RestoreState(savedState);
+
+    return !inCheck;
 }
 
 void Board::UpdateCheckStatus() {
@@ -509,20 +520,6 @@ void Board::UndoMove() {
     mHistory.pop_back();
 }
 
-// int Board::CountMoves(int depth) {
-//     if (depth == 0) return 1;
-//
-//     int count = 0;
-//     GeneratePossibleMoves(false);
-//
-//     for (const auto& move : mPossibleMoves) {
-//         MakeMove(move);
-//         count += CountMoves(depth - 1);
-//         UndoMove();
-//     }
-//
-//     return count;
-// }
 
 bool Board::IsPinned(int file, int rank) {
     BoardState savedState = SaveState();
@@ -562,286 +559,54 @@ bool Board::CanCastle(bool kingside, bool white) {
     return true;
 }
 
-// bool Board::IsDraw() {
-//     // 50-move rule
-//     if (mHalfMoveClock >= 50) return true;
-//
-//     // Threefold repetition
-//     if (mPositionHistory[mChessPosition] >= 3) return true;
-//
-//     // Insufficient material
-//     int whitePieces = 0, blackPieces = 0;
-//     bool whiteHasNonKing = false, blackHasNonKing = false;
-//     bool whiteHasPawnOrMajor = false, blackHasPawnOrMajor = false;
-//
-//     for (int rank = 0; rank < 8; rank++) {
-//         for (int file = 0; file < 8; file++) {
-//             int piece = mBoard[rank][file];
-//             if (piece == 0) continue;
-//
-//             if (piece > 0) {
-//                 whitePieces++;
-//                 if (abs(piece) != 6) whiteHasNonKing = true;
-//                 if (abs(piece) == 1 || abs(piece) >= 4) whiteHasPawnOrMajor = true;
-//             } else {
-//                 blackPieces++;
-//                 if (abs(piece) != 6) blackHasNonKing = true;
-//                 if (abs(piece) == 1 || abs(piece) >= 4) blackHasPawnOrMajor = true;
-//             }
-//         }
-//     }
-//
-//     // King vs King
-//     if (!whiteHasNonKing && !blackHasNonKing) return true;
-//
-//     // King + minor vs King
-//     if ((whitePieces == 1 && !blackHasPawnOrMajor && blackPieces <= 2) ||
-//         (blackPieces == 1 && !whiteHasPawnOrMajor && whitePieces <= 2)) {
-//         return true;
-//         }
-//
-//     return false;
-// }
-
-void Board::GenerateSlidingMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
-    // Rook moves (horizontal and vertical)
-    int directions[4][2] = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
-
-    for (int dir = 0; dir < 4; dir++) {
-        int newFile = file;
-        int newRank = rank;
-
-        while (true) {
-            newFile += directions[dir][0];
-            newRank += directions[dir][1];
-
-            if (!CheckBounds(newFile, newRank)) break;
-
-            int targetPiece = mBoard[newRank][newFile];
-
-            // If square is empty, add move
-            if (targetPiece == 0) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
-                }
-            }
-            // If square has opponent's piece, add capture and stop
-            else if ((pieceNum > 0 && targetPiece < 0) || (pieceNum < 0 && targetPiece > 0)) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
-                }
-                break;
-            }
-            // If square has own piece, stop
-            else {
-                break;
-            }
-        }
-    }
-}
-
-void Board::GenerateDiagonalMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
-    // Bishop moves (diagonal)
-    int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-
-    for (int dir = 0; dir < 4; dir++) {
-        int newFile = file;
-        int newRank = rank;
-
-        while (true) {
-            newFile += directions[dir][0];
-            newRank += directions[dir][1];
-
-            if (!CheckBounds(newFile, newRank)) break;
-
-            int targetPiece = mBoard[newRank][newFile];
-
-            // If square is empty, add move
-            if (targetPiece == 0) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
-                }
-            }
-            // If square has opponent's piece, add capture and stop
-            else if ((pieceNum > 0 && targetPiece < 0) || (pieceNum < 0 && targetPiece > 0)) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
-                }
-                break;
-            }
-            // If square has own piece, stop
-            else {
-                break;
-            }
-        }
-    }
-}
-
 bool Board::CheckBounds(int file, int rank) {
     return file >= 0 && file < 8 && rank >= 0 && rank < 8;
 }
 
-void Board::GenerateKingMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
-    int directions[8][2] = {{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}};
-
-    for (int dir = 0; dir < 8; dir++) {
-        int newFile = file + directions[dir][0];
-        int newRank = rank + directions[dir][1];
-
-        if (!CheckBounds(newFile, newRank)) continue;
-
-        int targetPiece = mBoard[newRank][newFile];
-
-        // Can move to empty square or capture opponent's piece
-        if (targetPiece == 0 || (pieceNum > 0 && targetPiece < 0) || (pieceNum < 0 && targetPiece > 0)) {
-            // Temporarily make move to check for safety
-            BoardState savedState = SaveState();
-            mBoard[rank][file] = 0;
-            mBoard[newRank][newFile] = pieceNum;
-
-            std::string newKingSquare = std::string(1, 'a'+newFile) + std::to_string(8-newRank);
-            bool safe = !IsSquareAttacked(newKingSquare, pieceNum < 0);
-
-            RestoreState(savedState);
-
-            if (safe) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
-                }
-            }
-        }
-    }
-
-    // Castling
-    if (!response) {
-        bool isWhite = pieceNum > 0;
-        if (isWhite == mWhiteTurn) {
-            // Kingside
-            if ((isWhite && mWhiteCastlingKingsideRights) || (!isWhite && mBlackCastlingKingsideRights)) {
-                if (CanCastle(true, isWhite)) {
-                    mPossibleMoves.push_back(isWhite ? "e1g1" : "e8g8");
-                }
-            }
-            // Queenside
-            if ((isWhite && mWhiteCastlingQueensideRights) || (!isWhite && mBlackCastlingQueensideRights)) {
-                if (CanCastle(false, isWhite)) {
-                    mPossibleMoves.push_back(isWhite ? "e1c1" : "e8c8");
-                }
-            }
-        }
-    }
-}
-
 void Board::GeneratePawnMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
-    int direction = (pieceNum > 0) ? -1 : 1; // White pawns move up (-1), black pawns move down (+1)
-    int startRank = (pieceNum > 0) ? 6 : 1;
+    bool isWhite = pieceNum > 0;
+    bool isPinned = IsPinned(file, rank);
+    auto& moves = response ? mResponses : mPossibleMoves;
+    int direction = isWhite ? -1 : 1;
+    int startRank = isWhite ? 6 : 1;
 
-    // Forward move
+    // Forward moves
     int newRank = rank + direction;
     if (CheckBounds(file, newRank) && mBoard[newRank][file] == 0) {
-        char fileChar = 'a' + file;
-        char rankChar = '8' - newRank;
-        std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-        std::string move = currentSquare + targetSquare;
+        if (!isPinned || IsPinnedDirectionValid(file, rank, isWhite, 0, direction)) {
+            if (IsMoveLegal(pieceNum, file, rank, file, newRank)) {
+                AddMove(currentSquare, file, newRank, moves);
 
-        if (response) {
-            mResponses.push_back(move);
-        } else {
-            mPossibleMoves.push_back(move);
-        }
-
-        // Double move from starting position
-        if (rank == startRank) {
-            newRank = rank + 2 * direction;
-            if (CheckBounds(file, newRank) && mBoard[newRank][file] == 0) {
-                rankChar = '8' - newRank;
-                targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
+                // Double push
+                if (rank == startRank && mBoard[rank + 2*direction][file] == 0) {
+                    if (IsMoveLegal(pieceNum, file, rank, file, rank + 2*direction)) {
+                        AddMove(currentSquare, file, rank + 2*direction, moves);
+                    }
                 }
             }
         }
     }
 
-    // En passant (fixed and moved outside forward move block)
-    if (!mEnPassantSquare.empty() && !response) {
-        int epFile = mEnPassantSquare[0] - 'a';
-        int epRank = '8' - mEnPassantSquare[1];
-
-        // Check if we're on the correct rank (5th for white, 4th for black)
-        bool correctRank = (pieceNum > 0) ? (rank == 3) : (rank == 4);
-
-        if (correctRank && (file == epFile - 1 || file == epFile + 1)) {
-            // The target square is one rank forward in the en passant file
-            int targetRank = rank + direction;
-            char fileChar = mEnPassantSquare[0];
-            char rankChar = '8' - targetRank;
-            std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-            std::string move = currentSquare + targetSquare;
-
-            mPossibleMoves.push_back(move);
-        }
-    }
-
-    // Capture moves (unchanged)
-    int captureFiles[2] = {file - 1, file + 1};
-    for (int i = 0; i < 2; i++) {
-        int newFile = captureFiles[i];
-        newRank = rank + direction;
-
+    // Captures
+    for (int i = -1; i <= 1; i += 2) {
+        int newFile = file + i;
         if (CheckBounds(newFile, newRank)) {
-            int targetPiece = mBoard[newRank][newFile];
-
-            // Can capture opponent's piece
-            if ((pieceNum > 0 && targetPiece < 0) || (pieceNum < 0 && targetPiece > 0)) {
-                char fileChar = 'a' + newFile;
-                char rankChar = '8' - newRank;
-                std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-                std::string move = currentSquare + targetSquare;
-
-                if (response) {
-                    mResponses.push_back(move);
-                } else {
-                    mPossibleMoves.push_back(move);
+            // Normal capture
+            int target = mBoard[newRank][newFile];
+            if (target != 0 && (target > 0) != isWhite) {
+                if (!isPinned || IsPinnedDirectionValid(file, rank, isWhite, i, direction)) {
+                    if (IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                        AddMove(currentSquare, newFile, newRank, moves);
+                    }
+                }
+            }
+            // En passant
+            else if (!mEnPassantSquare.empty() && newFile == (mEnPassantSquare[0]-'a') &&
+                    newRank == (8-(mEnPassantSquare[1]-'0'))) {
+                if (!isPinned || IsPinnedDirectionValid(file, rank, isWhite, i, direction)) {
+                    if (IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                        AddMove(currentSquare, newFile, newRank, moves);
+                    }
                 }
             }
         }
@@ -849,30 +614,210 @@ void Board::GeneratePawnMoves(int pieceNum, int file, int rank, std::string curr
 }
 
 void Board::GenerateKnightMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
-    int knightMoves[8][2] = {{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, {1, -2}, {1, 2}, {2, -1}, {2, 1}};
+    if (IsPinned(file, rank)) return; // Knights can't move if pinned
 
-    for (int i = 0; i < 8; i++) {
-        int newFile = file + knightMoves[i][0];
-        int newRank = rank + knightMoves[i][1];
+    static const int knightMoves[8][2] = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
+    auto& moves = response ? mResponses : mPossibleMoves;
+    bool isWhite = pieceNum > 0;
 
-        if (!CheckBounds(newFile, newRank)) continue;
-
-        int targetPiece = mBoard[newRank][newFile];
-
-        // Can move to empty square or capture opponent's piece
-        if (targetPiece == 0 || (pieceNum > 0 && targetPiece < 0) || (pieceNum < 0 && targetPiece > 0)) {
-            char fileChar = 'a' + newFile;
-            char rankChar = '8' - newRank;
-            std::string targetSquare = std::string(1, fileChar) + std::string(1, rankChar);
-            std::string move = currentSquare + targetSquare;
-
-            if (response) {
-                mResponses.push_back(move);
-            } else {
-                mPossibleMoves.push_back(move);
+    for (const auto& move : knightMoves) {
+        int newFile = file + move[0];
+        int newRank = rank + move[1];
+        if (CheckBounds(newFile, newRank)) {
+            int target = mBoard[newRank][newFile];
+            if (target == 0 || (target > 0) != isWhite) {
+                if (IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
             }
         }
     }
+}
+
+void Board::GenerateSlidingMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
+    bool isWhite = pieceNum > 0;
+    bool isPinned = IsPinned(file, rank);
+    auto& moves = response ? mResponses : mPossibleMoves;
+    static const int rookDirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+
+    for (const auto& dir : rookDirs) {
+        if (isPinned && !IsPinnedDirectionValid(file, rank, isWhite, dir[0], dir[1])) continue;
+
+        for (int dist = 1; dist < 8; dist++) {
+            int newFile = file + dir[0]*dist;
+            int newRank = rank + dir[1]*dist;
+            if (!CheckBounds(newFile, newRank)) break;
+
+            int target = mBoard[newRank][newFile];
+            if (target == 0) {
+                if (IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
+            } else {
+                if ((target > 0) != isWhite && IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
+                break;
+            }
+        }
+    }
+}
+
+void Board::GenerateDiagonalMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
+    bool isWhite = pieceNum > 0;
+    bool isPinned = IsPinned(file, rank);
+    auto& moves = response ? mResponses : mPossibleMoves;
+    static const int bishopDirs[4][2] = {{1,1},{1,-1},{-1,1},{-1,-1}};
+
+    for (const auto& dir : bishopDirs) {
+        if (isPinned && !IsPinnedDirectionValid(file, rank, isWhite, dir[0], dir[1])) continue;
+
+        for (int dist = 1; dist < 8; dist++) {
+            int newFile = file + dir[0]*dist;
+            int newRank = rank + dir[1]*dist;
+            if (!CheckBounds(newFile, newRank)) break;
+
+            int target = mBoard[newRank][newFile];
+            if (target == 0) {
+                if (IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
+            } else {
+                if ((target > 0) != isWhite && IsMoveLegal(pieceNum, file, rank, newFile, newRank)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
+                break;
+            }
+        }
+    }
+}
+
+void Board::GenerateKingMoves(int pieceNum, int file, int rank, std::string currentSquare, bool response) {
+    bool isWhite = pieceNum > 0;
+    auto& moves = response ? mResponses : mPossibleMoves;
+    static const int kingMoves[8][2] = {{-1,-1},{-1,0},{-1,1},{0,-1},{0,1},{1,-1},{1,0},{1,1}};
+
+    // Normal king moves
+    for (const auto& move : kingMoves) {
+        int newFile = file + move[0];
+        int newRank = rank + move[1];
+        if (CheckBounds(newFile, newRank)) {
+            int target = mBoard[newRank][newFile];
+            if (target == 0 || (target > 0) != isWhite) {
+                // Temporarily move king to check safety
+                BoardState saved = SaveState();
+                mBoard[rank][file] = 0;
+                mBoard[newRank][newFile] = pieceNum;
+                std::string newKingSquare = std::string(1,'a'+newFile) + std::to_string(8-newRank);
+
+                if (!IsSquareAttacked(newKingSquare, !isWhite)) {
+                    AddMove(currentSquare, newFile, newRank, moves);
+                }
+                RestoreState(saved);
+            }
+        }
+    }
+
+    // Castling - only for non-response moves
+    if (!response && !IsPinned(file, rank)) {
+        bool kingsideAllowed = isWhite ? mWhiteCastlingKingsideRights : mBlackCastlingKingsideRights;
+        bool queensideAllowed = isWhite ? mWhiteCastlingQueensideRights : mBlackCastlingQueensideRights;
+        int castlingRank = isWhite ? 7 : 0;
+
+        // Kingside castling
+        if (kingsideAllowed) {
+            bool pathClear = true;
+            // Check squares between king and rook (f1,g1 for white)
+            for (int f = file+1; f <= 6; f++) {
+                if (mBoard[castlingRank][f] != 0) {
+                    pathClear = false;
+                    break;
+                }
+            }
+
+            if (pathClear) {
+                bool safePath = true;
+                // Check if squares are under attack (e1,f1,g1 for white)
+                for (int f = file; f <= file+2; f++) {
+                    std::string square = std::string(1,'a'+f) + std::to_string(8-castlingRank);
+                    if (IsSquareAttacked(square, !isWhite)) {
+                        safePath = false;
+                        break;
+                    }
+                }
+
+                if (safePath) {
+                    moves.push_back(isWhite ? "e1g1" : "e8g8");
+                }
+            }
+        }
+
+        // Queenside castling
+        if (queensideAllowed) {
+            bool pathClear = true;
+            // Check squares between king and rook (b1,c1,d1 for white)
+            for (int f = file-1; f >= 1; f--) {
+                if (mBoard[castlingRank][f] != 0) {
+                    pathClear = false;
+                    break;
+                }
+            }
+
+            if (pathClear && mBoard[castlingRank][0] == (isWhite ? 4 : -4)) { // Rook still there
+                bool safePath = true;
+                // Check if squares are under attack (e1,d1,c1 for white)
+                for (int f = file; f >= file-2; f--) {
+                    std::string square = std::string(1,'a'+f) + std::to_string(8-castlingRank);
+                    if (IsSquareAttacked(square, !isWhite)) {
+                        safePath = false;
+                        break;
+                    }
+                }
+
+                if (safePath) {
+                    moves.push_back(isWhite ? "e1c1" : "e8c8");
+                }
+            }
+        }
+    }
+}
+
+// Helper function implementations
+bool Board::IsMoveLegal(int pieceNum, int fromFile, int fromRank, int toFile, int toRank) {
+    BoardState saved = SaveState();
+    int captured = mBoard[toRank][toFile];
+    mBoard[fromRank][fromFile] = 0;
+    mBoard[toRank][toFile] = pieceNum;
+
+    std::string kingSquare = (pieceNum > 0) ? mWhiteKingSquare : mBlackKingSquare;
+    if (abs(pieceNum) == 6) { // Moving king
+        kingSquare = std::string(1,'a'+toFile) + std::to_string(8-toRank);
+    }
+
+    bool legal = !IsSquareAttacked(kingSquare, pieceNum < 0);
+    RestoreState(saved);
+    return legal;
+}
+
+bool Board::IsPinnedDirectionValid(int file, int rank, bool isWhite, int dx, int dy) {
+    std::string kingSquare = isWhite ? mWhiteKingSquare : mBlackKingSquare;
+    int kingFile = kingSquare[0]-'a';
+    int kingRank = 8-(kingSquare[1]-'0');
+
+    // Check if movement direction aligns with king
+    int fileDiff = file - kingFile;
+    int rankDiff = rank - kingRank;
+
+    // Same file/rank/diagonal check
+    if (fileDiff == 0) return dx == 0; // Vertical movement only
+    if (rankDiff == 0) return dy == 0; // Horizontal movement only
+    if (abs(fileDiff) == abs(rankDiff)) return dx == (fileDiff > 0 ? 1 : -1) &&
+                                             dy == (rankDiff > 0 ? 1 : -1);
+    return false;
+}
+
+void Board::AddMove(const std::string& from, int toFile, int toRank, std::vector<std::string>& moves) {
+    moves.push_back(from + std::string(1,'a'+toFile) + std::to_string(8-toRank));
 }
 
 void Board::displayWinner() {
@@ -1004,7 +949,7 @@ void Board::PlayEngine() {
             break;
         }
 
-        if (mWhiteTurn) {
+        if (!mWhiteTurn) {
             // Player's turn
             PrintInternalBoard();
             std::cout << "Current position: " << mChessPosition << std::endl;

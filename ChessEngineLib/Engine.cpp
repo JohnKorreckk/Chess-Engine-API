@@ -34,39 +34,173 @@ const int BLACK_BISHOP = BLACK + BISHOP;
 const int BLACK_ROOK = BLACK + ROOK;
 const int BLACK_QUEEN = BLACK + QUEEN;
 
-// Evaluate board based on material count
-int Engine::EvaluateBoard(Board& board)
-{
+int Engine::EvaluateBoard(Board& board) {
     std::vector<std::vector<int>> boardArray = board.GetBoard();
-    int eval = 0;
-    for (int rank = 0; rank < boardArray.size(); rank++)
-    {
-        for (int file = 0; file < boardArray[0].size(); file++)
-        {
-            switch (boardArray[rank][file])
-            {
-                case WHITE_PAWN: eval += 1; break;
-                case WHITE_KNIGHT: eval += 3; break;
-                case WHITE_BISHOP: eval += 3; break;
-                case WHITE_ROOK: eval += 5; break;
-                case WHITE_QUEEN: eval += 9; break;
+    int materialEval = 0;
+    int controlEval = 0;
 
-                case BLACK_PAWN: eval -= 1; break;
-                case BLACK_KNIGHT: eval -= 3; break;
-                case BLACK_BISHOP: eval -= 3; break;
-                case BLACK_ROOK: eval -= 5; break;
-                case BLACK_QUEEN: eval -= 9; break;
+    // Piece square tables for positional evaluation
+    const int pawnTable[8][8] = {
+        { 0,  0,  0,  0,  0,  0,  0,  0},
+        {50, 50, 50, 50, 50, 50, 50, 50},
+        {10, 10, 20, 30, 30, 20, 10, 10},
+        { 5,  5, 10, 25, 25, 10,  5,  5},
+        { 0,  0,  0, 20, 20,  0,  0,  0},
+        { 5, -5,-10,  0,  0,-10, -5,  5},
+        { 5, 10, 10,-20,-20, 10, 10,  5},
+        { 0,  0,  0,  0,  0,  0,  0,  0}
+    };
 
-                default: break;
+    const int knightTable[8][8] = {
+        {-50,-40,-30,-30,-30,-30,-40,-50},
+        {-40,-20,  0,  0,  0,  0,-20,-40},
+        {-30,  0, 10, 15, 15, 10,  0,-30},
+        {-30,  5, 15, 20, 20, 15,  5,-30},
+        {-30,  0, 15, 20, 20, 15,  0,-30},
+        {-30,  5, 10, 15, 15, 10,  5,-30},
+        {-40,-20,  0,  5,  5,  0,-20,-40},
+        {-50,-40,-30,-30,-30,-30,-40,-50}
+    };
+
+    const int bishopTable[8][8] = {
+        {-20,-10,-10,-10,-10,-10,-10,-20},
+        {-10,  0,  0,  0,  0,  0,  0,-10},
+        {-10,  0,  5, 10, 10,  5,  0,-10},
+        {-10,  5,  5, 10, 10,  5,  5,-10},
+        {-10,  0, 10, 10, 10, 10,  0,-10},
+        {-10, 10, 10, 10, 10, 10, 10,-10},
+        {-10,  5,  0,  0,  0,  0,  5,-10},
+        {-20,-10,-10,-10,-10,-10,-10,-20}
+    };
+
+    // Central control bonus (squares e4,e5,d4,d5)
+    const int centralControlBonus = 10;
+
+    for (int rank = 0; rank < boardArray.size(); rank++) {
+        for (int file = 0; file < boardArray[0].size(); file++) {
+            int piece = boardArray[rank][file];
+            if (piece == EMPTY) continue;
+
+            bool isWhite = (piece & WHITE);
+            int sign = isWhite ? 1 : -1;
+            int pieceType = piece & 7; // Get piece type without color
+
+            // Material evaluation
+            switch (pieceType) {
+                case PAWN:
+                    materialEval += sign * 100;
+                    materialEval += sign * pawnTable[isWhite ? rank : 7-rank][file];
+                    break;
+                case KNIGHT:
+                    materialEval += sign * 300;
+                    materialEval += sign * knightTable[isWhite ? rank : 7-rank][file];
+                    break;
+                case BISHOP:
+                    materialEval += sign * 300;
+                    materialEval += sign * bishopTable[isWhite ? rank : 7-rank][file];
+                    break;
+                case ROOK: materialEval += sign * 500; break;
+                case QUEEN: materialEval += sign * 900; break;
             }
+
+            // Control evaluation
+            int controlValue = 0;
+            switch (pieceType) {
+                case PAWN: {
+                    // Pawns control diagonally forward
+                    int forward = isWhite ? -1 : 1;
+                    for (int i = -1; i <= 1; i += 2) {
+                        int newFile = file + i;
+                        int newRank = rank + forward;
+                        if (newFile >= 0 && newFile < 8 && newRank >= 0 && newRank < 8) {
+                            controlValue += 5; // Base control value
+                            // Bonus for controlling center
+                            if ((newFile >= 3 && newFile <= 4) && (newRank >= 3 && newRank <= 4)) {
+                                controlValue += centralControlBonus;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case KNIGHT: {
+                    // Knight moves
+                    const int knightMoves[8][2] = {{-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}};
+                    for (const auto& move : knightMoves) {
+                        int newFile = file + move[0];
+                        int newRank = rank + move[1];
+                        if (newFile >= 0 && newFile < 8 && newRank >= 0 && newRank < 8) {
+                            controlValue += 10;
+                            if ((newFile >= 3 && newFile <= 4) && (newRank >= 3 && newRank <= 4)) {
+                                controlValue += centralControlBonus * 2;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case BISHOP:
+                case ROOK:
+                case QUEEN: {
+                    // Sliding pieces
+                    const int bishopDirs[4][2] = {{1,1},{1,-1},{-1,1},{-1,-1}};
+                    const int rookDirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+                    const int* dirs = (pieceType == BISHOP) ? *bishopDirs :
+                                      (pieceType == ROOK) ? *rookDirs : nullptr;
+                    int dirCount = (pieceType == BISHOP) ? 4 :
+                                  (pieceType == ROOK) ? 4 : 8;
+
+                    if (pieceType == QUEEN) {
+                        // Queen combines bishop and rook
+                        for (int i = 0; i < 8; i++) {
+                            const int* dir = (i < 4) ? bishopDirs[i] : rookDirs[i-4];
+                            for (int dist = 1; dist < 8; dist++) {
+                                int newFile = file + dir[0] * dist;
+                                int newRank = rank + dir[1] * dist;
+                                if (newFile < 0 || newFile >= 8 || newRank < 0 || newRank >= 8) break;
+                                controlValue += 5;
+                                if ((newFile >= 3 && newFile <= 4) && (newRank >= 3 && newRank <= 4)) {
+                                    controlValue += centralControlBonus;
+                                }
+                                if (boardArray[newRank][newFile] != EMPTY) break; // Blocked
+                            }
+                        }
+                    } else {
+                        for (int i = 0; i < dirCount; i++) {
+                            const int* dir = (pieceType == BISHOP) ? bishopDirs[i] : rookDirs[i];
+                            for (int dist = 1; dist < 8; dist++) {
+                                int newFile = file + dir[0] * dist;
+                                int newRank = rank + dir[1] * dist;
+                                if (newFile < 0 || newFile >= 8 || newRank < 0 || newRank >= 8) break;
+                                controlValue += 5;
+                                if ((newFile >= 3 && newFile <= 4) && (newRank >= 3 && newRank <= 4)) {
+                                    controlValue += centralControlBonus;
+                                }
+                                if (boardArray[newRank][newFile] != EMPTY) break; // Blocked
+                            }
+                        }
+                    }
+                    break;
+                }
+                case KING: {
+                    // King control (less important)
+                    const int kingMoves[8][2] = {{-1,-1},{-1,0},{-1,1},{0,-1},{0,1},{1,-1},{1,0},{1,1}};
+                    for (const auto& move : kingMoves) {
+                        int newFile = file + move[0];
+                        int newRank = rank + move[1];
+                        if (newFile >= 0 && newFile < 8 && newRank >= 0 && newRank < 8) {
+                            controlValue += 3; // King control is less valuable
+                        }
+                    }
+                    break;
+                }
+            }
+
+            controlEval += sign * controlValue;
         }
     }
-    return eval;
-}
 
-// Remove these from Engine.h/Engine.cpp entirely:
-// void MakeMove(Board& board, const std::string& move);
-// void UndoMove(Board& board);
+    // Combine material and control evaluations with weights
+    return materialEval + (controlEval / 5); // Adjust weight as needed
+}
 
 // Modify FindBestMove to use board copies:
 std::string Engine::FindBestMove(Board& board, int depth) {
@@ -101,15 +235,17 @@ int Engine::Minimax(Board& board, int depth, bool maximizingPlayer, int alpha, i
     std::vector<std::string> possibleMoves = board.GetPossibleMoves();
 
     if (possibleMoves.empty()) {
-        // Checkmate or stalemate
-        return EvaluateBoard(board); // TODO: Add proper checkmate detection
-    }
+        bool inCheck = board.IsWhiteTurn() ? board.IsWhiteInCheck() : board.IsBlackInCheck();
+
+            return maximizingPlayer ? std::numeric_limits<int>::min()
+                                    : std::numeric_limits<int>::max();
+        }
 
     if (maximizingPlayer) {
         int maxEval = std::numeric_limits<int>::min();
         for (const auto& move : possibleMoves) {
-            Board tempBoard = board; // Create copy
-            tempBoard.MakeMove(move); // Use Board's move function
+            Board tempBoard = board;
+            tempBoard.MakeMove(move);
             int eval = Minimax(tempBoard, depth - 1, false, alpha, beta);
             maxEval = std::max(maxEval, eval);
             alpha = std::max(alpha, eval);
@@ -117,12 +253,11 @@ int Engine::Minimax(Board& board, int depth, bool maximizingPlayer, int alpha, i
                 break; // Beta cutoff
         }
         return maxEval;
-    }
-    else { // Minimizing player
+    } else {
         int minEval = std::numeric_limits<int>::max();
         for (const auto& move : possibleMoves) {
-            Board tempBoard = board; // Create copy
-            tempBoard.MakeMove(move); // Use Board's move function
+            Board tempBoard = board;
+            tempBoard.MakeMove(move);
             int eval = Minimax(tempBoard, depth - 1, true, alpha, beta);
             minEval = std::min(minEval, eval);
             beta = std::min(beta, eval);

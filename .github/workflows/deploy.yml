@@ -13,8 +13,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Optional: add testing/build steps here if desired
-
       - name: Set up Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
 
